@@ -22,6 +22,7 @@ const estadoEmoji = estado => {
 
 const contieneEvidencia = comentario => {
   if (!comentario || !comentario.body) return false;
+
   const texto = JSON.stringify(comentario.body).toLowerCase();
 
   const palabrasClave = [
@@ -34,10 +35,16 @@ const contieneEvidencia = comentario => {
     'comporta como se espera',
     'ejemplos válidos',
     'ver imagen',
-    'evidencia'
+    'evidencia',
+    'curl ',
+    'http',
+    '.png',
+    '.jpg',
+    '.jpeg',
+    '.gif'
   ];
 
-  return palabrasClave.some(palabra => texto.includes(palabra));
+  return palabrasClave.some(p => texto.includes(p));
 };
 
 const simulateMessage = async () => {
@@ -89,7 +96,7 @@ changeLog support-chats tag v1.71.0
 
       let evidenciaTexto = '';
       if (autor) {
-        evidenciaTexto = `(Con evidencias de @${autor})`;
+        evidenciaTexto = `(Con evidencias de ${autor})`; // sin @
       } else {
         evidenciaTexto = '👀 (Falta evidencia)';
         aprobables = false;
@@ -120,4 +127,5 @@ changeLog support-chats tag v1.71.0
 };
 
 simulateMessage();
+
 
