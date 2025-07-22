@@ -22,8 +22,22 @@ const estadoEmoji = estado => {
 
 const contieneEvidencia = comentario => {
   if (!comentario || !comentario.body) return false;
-  const textoPlano = JSON.stringify(comentario.body).toLowerCase();
-  return /(evidencia|screenshot|adjunto|img|ver imagen)/.test(textoPlano);
+  const texto = JSON.stringify(comentario.body).toLowerCase();
+
+  const palabrasClave = [
+    '#evidencia',
+    'funcionamiento esperado',
+    'logs validados',
+    'se observa',
+    'adjunto',
+    'screenshot',
+    'comporta como se espera',
+    'ejemplos válidos',
+    'ver imagen',
+    'evidencia'
+  ];
+
+  return palabrasClave.some(palabra => texto.includes(palabra));
 };
 
 const simulateMessage = async () => {
@@ -70,7 +84,6 @@ changeLog support-chats tag v1.71.0
       titulo = titulo.replace(`[${modulo}]`, '').trim();
 
       const comments = issue.fields.comment?.comments || [];
-
       const lastWithEvidence = [...comments].reverse().find(contieneEvidencia);
       const autor = lastWithEvidence?.author?.displayName;
 
@@ -78,13 +91,14 @@ changeLog support-chats tag v1.71.0
       if (autor) {
         evidenciaTexto = `(Con evidencias de @${autor})`;
       } else {
-        evidenciaTexto = `👀 (Falta evidencia)`
+        evidenciaTexto = '👀 (Falta evidencia)';
         aprobables = false;
       }
 
-      results.push(`${emoji} ${key} [${modulo}] ${titulo} - ${estado} ${evidenciaTexto}`);
+      const link = `https://${process.env.JIRA_DOMAIN}/browse/${key}`;
+      results.push(`- ${emoji} [${key}](${link}) [${modulo}] ${titulo} - *${estado}* ${evidenciaTexto}`);
     } catch (error) {
-      results.push(`${key} ❌ Error al consultar Jira`);
+      results.push(`- ${key} ❌ Error al consultar Jira`);
       aprobables = false;
       console.error(`Error con ${key}:`, error.response?.data || error.message);
     }
@@ -106,3 +120,4 @@ changeLog support-chats tag v1.71.0
 };
 
 simulateMessage();
+
