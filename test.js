@@ -49,12 +49,10 @@ const contieneEvidencia = comentario => {
 
 const simulateMessage = async () => {
   const mensaje = `
-changeLog support-chats tag v1.71.0
-[SPTO-5143] Add cache to initiativeFlow value for first time
-[SPHC-5601] I added logic to send the deeplink parameters of the push according to the hc version.
-[SPHC-5615] update query for additional chats
-[SPTO-5232] Adicionar rescue como initiative flow al flujo de post live
-[SPTO-5300] Adjust queries in monitoring process to get post order chats.
+changeLog support-chats tag v1.72.0
+[SPHC-5713] Update lib rules-engine-js v2.138.1
+[SPHC-4926] Update required validation to optional as is calling itself
+[SPHC-5753] Adjust refund and compensation policy URLs by country.
 @ChangeBot
 `;
 
