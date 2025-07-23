@@ -124,6 +124,23 @@ app.event('app_mention', async ({ event, client, say }) => {
   await say(final);
 });
 
+app.message(async ({ message, say }) => {
+  if (message.channel_type === 'im' && !message.bot_id) {
+    const texto = message.text;
+    const changelog = extractChangelog(texto);
+    const tickets = extractTickets(texto);
+
+    if (!changelog || tickets.length === 0) {
+      await say(`❌ No se encontró un changelog ni tickets válidos en el mensaje.`);
+      return;
+    }
+
+    // TODO: podés copiar la lógica de procesamiento de tickets aquí
+    await say(`(Simulado) Detectado CHANGELOG "${changelog}" con tickets: ${tickets.join(', ')}`);
+  }
+});
+
+
 // Iniciar app
 (async () => {
   await app.start();
