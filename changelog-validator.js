@@ -1,0 +1,351 @@
+const { WebClient } = require('@slack/web-api');
+const fs = require('fs');
+const path = require('path');
+const moment = require('moment');
+require('dotenv').config();
+
+const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
+const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
+const STATE_FILE = path.join(__dirname, 'changelog-state.json');
+
+// Configuración de ventanas de validación
+const VALIDATION_WINDOWS = [
+  { start: 10, end: 11, name: 'Mañana' },
+  { start: 15, end: 16, name: 'Tarde' },
+  { start: 19, end: 20, name: 'Noche' }
+];
+
+const BUFFER_HOURS = 2; // Horas para completar validaciones después de CHANGELOG
+const CHECK_INTERVAL = 20; // Minutos entre checks
+
+/**
+ * Obtiene el estado actual de validación
+ */
+function getState() {
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    }
+  } catch (error) {
+    console.error('Error reading state file:', error);
+  }
+  return { changelogs: [], validatedAt: new Date().toISOString() };
+}
+
+/**
+ * Guarda el estado de validación
+ */
+function saveState(state) {
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  } catch (error) {
+    console.error('Error writing state file:', error);
+  }
+}
+
+/**
+ * Obtiene mensajes del canal desde hace N horas
+ */
+async function getRecentMessages(hoursBack = 24) {
+  try {
+    const channels = [process.env.SLACK_CHANNEL_ID];
+    
+    // Si hay un usuario interno configurado, también revisar mensajes directos
+    if (process.env.INTERNAL_USER_ID) {
+      channels.push(process.env.INTERNAL_USER_ID);
+    }
+
+    let allMessages = [];
+
+    for (const channel of channels) {
+      try {
+        const result = await slack.conversations.history({
+          channel: channel,
+          oldest: Math.floor(Date.now() / 1000) - (hoursBack * 3600)
+        });
+
+        if (result.messages) {
+          // Marcar de qué canal vienen los mensajes
+          const messagesWithSource = result.messages.map(msg => ({
+            ...msg,
+            source_channel: channel,
+            is_dm: channel === process.env.INTERNAL_USER_ID
+          }));
+          allMessages.push(...messagesWithSource);
+        }
+      } catch (error) {
+        logger.error(`Error fetching messages from ${channel}:`, error.message);
+      }
+    }
+
+    return allMessages;
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    return [];
+  }
+}
+
+/**
+ * Extrae información de CHANGELOG del mensaje
+ */
+function parseChangelogMessage(text) {
+  const changelogPattern = /CHANGELOG\s+\[([^\]]+)\]\s+\[([^\]]+)\]/i;
+  const match = text.match(changelogPattern);
+  
+  if (match) {
+    const ticketPattern = /([A-Z]+-\d+)/g;
+    const tickets = [];
+    let ticketMatch;
+    
+    while ((ticketMatch = ticketPattern.exec(text)) !== null) {
+      tickets.push(ticketMatch[1]);
+    }
+
+    return {
+      component: match[1],
+      version: match[2],
+      tickets: tickets,
+      hasMentions: text.includes('@qa-support') || text.includes('@eduardo.baptista'),
+      text: text
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Verifica si está en ventana de validación
+ */
+function isInValidationWindow() {
+  const now = moment();
+  const hour = now.hour();
+  const minute = now.minute();
+  
+  return VALIDATION_WINDOWS.some(window => {
+    if (hour === window.start) {
+      return true; // Cualquier minuto de la hora inicial
+    }
+    if (hour === window.end && minute < 60) {
+      return true; // Durante la hora final
+    }
+  });
+}
+
+/**
+ * Obtiene la ventana de validación actual
+ */
+function getCurrentWindow() {
+  const now = moment();
+  const hour = now.hour();
+  
+  return VALIDATION_WINDOWS.find(window => {
+    return (hour >= window.start && hour < window.end) || 
+           (hour === window.end && now.minute() < 60);
+  });
+}
+
+/**
+ * Valida CHANGELOGs pendientes
+ */
+async function validateChangelogs() {
+  console.log(`\n[${moment().format('YYYY-MM-DD HH:mm:ss')}] Iniciando validación de CHANGELOGs...`);
+
+  const state = getState();
+  const messages = await getRecentMessages(24);
+  let newChangelogs = [];
+  let pendingValidations = [];
+
+  // Procesar nuevos mensajes
+  for (const msg of messages) {
+    if (msg.bot_id || msg.subtype === 'bot_message') continue;
+
+    const changelog = parseChangelogMessage(msg.text);
+    if (!changelog) continue;
+
+    const msgTimestamp = moment.unix(msg.ts.split('.')[0]);
+    const changelogId = `${msg.ts}`;
+    const existingChangelog = state.changelogs.find(c => c.id === changelogId);
+
+    if (!existingChangelog) {
+      // CHANGELOG nuevo
+      const newEntry = {
+        id: changelogId,
+        component: changelog.component,
+        version: changelog.version,
+        tickets: changelog.tickets,
+        user: msg.user,
+        timestamp: msgTimestamp.toISOString(),
+        detectedAt: new Date().toISOString(),
+        hasMentions: changelog.hasMentions,
+        status: 'pending',
+        lastChecked: new Date().toISOString()
+      };
+
+      state.changelogs.push(newEntry);
+      newChangelogs.push(newEntry);
+
+      console.log(`✓ CHANGELOG NUEVO: ${changelog.component} v${changelog.version}`);
+    } else {
+      // CHANGELOG existente
+      const hoursSinceCreation = moment().diff(moment(existingChangelog.timestamp), 'hours');
+
+      if (existingChangelog.status === 'pending' && hoursSinceCreation <= BUFFER_HOURS) {
+        pendingValidations.push({
+          ...existingChangelog,
+          hoursSinceCreation,
+          hoursRemaining: BUFFER_HOURS - hoursSinceCreation
+        });
+      }
+    }
+  }
+
+  saveState(state);
+
+  // Notificar sobre nuevos CHANGELOGs
+  if (newChangelogs.length > 0) {
+    await notifyNewChangelogs(newChangelogs);
+  }
+
+  // Notificar sobre pendientes
+  if (pendingValidations.length > 0) {
+    await notifyPendingValidations(pendingValidations);
+  }
+
+  // Mostrar resumen
+  showSummary(state, newChangelogs, pendingValidations);
+
+  return {
+    newChangelogs,
+    pendingValidations,
+    windowActive: isInValidationWindow(),
+    currentWindow: getCurrentWindow()
+  };
+}
+
+/**
+ * Notifica sobre nuevos CHANGELOGs
+ */
+async function notifyNewChangelogs(changelogs) {
+  for (const changelog of changelogs) {
+    const hours = Math.round(moment().diff(moment(changelog.timestamp), 'hours', true) * 10) / 10;
+    
+    const blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `🆕 *CHANGELOG Detectado*\n*Componente:* ${changelog.component}\n*Versión:* ${changelog.version}\n*Tickets:* ${changelog.tickets.join(', ')}\n*Usuario:* <@${changelog.user}>`
+        }
+      },
+      {
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: `⏱️ Detected hace ${hours} hora(s) | Validar dentro de ${BUFFER_HOURS} horas`
+        }]
+      }
+    ];
+
+    try {
+      await slack.chat.postMessage({
+        channel: SLACK_CHANNEL_ID,
+        text: `CHANGELOG ${changelog.component} v${changelog.version} detectado`,
+        blocks: blocks
+      });
+    } catch (error) {
+      console.error('Error sending notification:', error);
+    }
+  }
+}
+
+/**
+ * Notifica sobre CHANGELOGs pendientes
+ */
+async function notifyPendingValidations(pending) {
+  for (const changelog of pending) {
+    const statusEmoji = changelog.hoursRemaining > 1 ? '⏳' : '⚠️';
+    
+    const blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${statusEmoji} *CHANGELOG Pendiente*\n*Componente:* ${changelog.component}\n*Versión:* ${changelog.version}\n*Tiempo Restante:* ${Math.round(changelog.hoursRemaining * 60)} minutos`
+        }
+      },
+      {
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: `📋 Recordatorio: Completa la validación en Jira (cerrar tickets + evidencia)`
+        }]
+      }
+    ];
+
+    try {
+      await slack.chat.postMessage({
+        channel: SLACK_CHANNEL_ID,
+        text: `Validación pendiente: ${changelog.component}`,
+        blocks: blocks
+      });
+    } catch (error) {
+      console.error('Error sending pending notification:', error);
+    }
+  }
+}
+
+/**
+ * Muestra resumen de validación
+ */
+function showSummary(state, newChangelogs, pendingValidations) {
+  console.log('\n' + '='.repeat(60));
+  console.log('📊 RESUMEN DE VALIDACIÓN');
+  console.log('='.repeat(60));
+  console.log(`Ventana Activa: ${isInValidationWindow() ? '✅ SÍ (' + (getCurrentWindow()?.name || 'N/A') + ')' : '❌ NO'}`);
+  console.log(`CHANGELOGs Nuevos: ${newChangelogs.length}`);
+  console.log(`CHANGELOGs Pendientes: ${pendingValidations.length}`);
+  console.log(`CHANGELOGs Totales Registrados: ${state.changelogs.length}`);
+  console.log(`Última Validación: ${state.validatedAt}`);
+  
+  if (pendingValidations.length > 0) {
+    console.log('\n⏳ PENDIENTES:');
+    pendingValidations.forEach(p => {
+      console.log(`  - ${p.component} v${p.version} (${Math.round(p.hoursRemaining * 60)} min restantes)`);
+    });
+  }
+  
+  console.log('='.repeat(60) + '\n');
+}
+
+/**
+ * Ejecuta validación completa
+ */
+async function runValidation() {
+  try {
+    const result = await validateChangelogs();
+    return result;
+  } catch (error) {
+    console.error('Error during validation:', error);
+    process.exit(1);
+  }
+}
+
+// Ejecutar si se llama directamente
+if (require.main === module) {
+  runValidation().then(result => {
+    console.log('\nValidación completada exitosamente');
+    process.exit(0);
+  }).catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  validateChangelogs,
+  getState,
+  saveState,
+  VALIDATION_WINDOWS,
+  isInValidationWindow,
+  getCurrentWindow
+};
