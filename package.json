@@ -2,13 +2,11 @@
   "name": "changebot",
   "version": "1.0.0",
   "description": "Bot automatizado para validación de mensajes de CHANGELOG en Slack con integración a Jira",
-  "main": "changelog-validator.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node changelog-validator.js",
-    "validate": "node changelog-validator.js",
-    "mentions": "node mention-validator.js",
-    "test": "node test-mentions.js",
-    "setup-scheduler": "powershell -ExecutionPolicy Bypass -File setup-scheduler.ps1 -Setup"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "setup": "powershell -ExecutionPolicy Bypass -File setup-scheduler.ps1 -Setup"
   },
   "keywords": [
     "slack",

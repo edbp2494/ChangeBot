@@ -1,237 +1,132 @@
-<<<<<<< HEAD
-# ChangeBot - Automatización de Validación de CHANGELOG
+# ChangeBot - CHANGELOG Validator para Slack & Jira
 
-Bot automatizado para validar mensajes de CHANGELOG en Slack (#qa-soporte) con integración a Jira.
+Bot automatizado para validación de mensajes de CHANGELOG en Slack con integración a Jira.
 
-**Nota**: Sin necesidad de permisos de admin en Slack. Se ejecuta automáticamente cada 20 minutos en 3 ventanas horarias.
+## 🚀 Características
 
-## 🚀 Funcionalidades Principales
+- **Validación automática de CHANGELOGs** contra Jira
+- **Respuesta inmediata** cuando se menciona `@changebot`
+- **Detección de evidencia** en comentarios y archivos adjuntos
+- **Mención de grupo** @qa-support automática
+- **Sin servidor HTTP** requerido (ejecución local)
 
-### 1. **Validación Automática sin Bot Admin**
-- ✅ Detecta CHANGELOGs automáticamente
-- ✅ No requiere agregar bot al canal (solo acceso de lectura)
-- ✅ Funciona 24/7 sin intervención manual
+## 📋 Requisitos
 
-### 2. **3 Ventanas de Validación Programadas**
-- **10:00 - 11:00** (Mañana)
-- **15:00 - 16:00** (Tarde)
-- **19:00 - 20:00** (Noche)
+- Node.js 18+
+- Slack Bot Token
+- Jira API Token
+- Acceso a API de Slack y Jira
 
-### 3. **Validación Inteligente dentro de Ventanas**
-- Check cada **20 minutos** (automático)
-- **Buffer de 2 horas** para completar validaciones
-- Notificaciones inmediatas si falta validación
-- Rastreo de estado persistente
+## 🔧 Instalación
 
-### 4. **Integración con Jira**
-- Verifica que tickets estén en estado "Closed"
-- Valida evidencia en comentarios (palabra: "evidencia")
-- Comprueba imágenes adjuntas recientes
-
-### 5. **Respuestas Automáticas en Slack**
-- ✅ Aprobación cuando todo está correcto
-- ⚠️ Lista específica de pendientes
-- ❌ Errores de formato con guía
-
-### 4. **Validación Interna**
-- 🤖 **Usuario GitHub**: eduardo-baptista_rappinc validado
-- 📊 **Tokens Copilot**: Monitoreo automático de uso
-- ✅ **Mensajes Internos**: Validación especial para @eduardo.baptista
-
-## 🏗️ Arquitectura
-
-```
-ChangeBot/
-├── changelog-validator.js   # Script principal (sin servidor HTTP)
-├── services/
-│   ├── messageValidator.js  # Validación de formato
-│   ├── jiraService.js       # Integración con Jira
-│   └── slackService.js      # Respuestas automáticas
-├── utils/
-│   └── logger.js            # Sistema de logs
-├── setup-scheduler.ps1      # Configurador automático
-├── changelog-state.json     # Estado persistente (auto-generado)
-└── SCHEDULER.md             # Guía de configuración
-```
-
-## ⚙️ Configuración Rápida
-
-### **1. Configurar variables de entorno**
 ```bash
+# 1. Clonar el repositorio
+git clone https://github.com/edbp2494/ChangeBot.git
+cd ChangeBot
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Configurar variables de entorno
 cp .env.example .env
-# Edita .env con tus tokens
+# Editar .env con tus credenciales
 ```
 
-### **2. Crear tareas programadas** (PowerShell como Admin)
-```powershell
-.\setup-scheduler.ps1 -Setup
+### Variables de Entorno Requeridas
+
+```env
+SLACK_BOT_TOKEN=xoxb-...              # Token del bot
+SLACK_SIGNING_SECRET=...               # Signing secret
+SLACK_CHANNEL_ID=C...                  # ID del canal
+JIRA_DOMAIN=rappidev.atlassian.net     # Dominio Jira
+JIRA_EMAIL=user@rappi.com             # Email Jira
+JIRA_API_TOKEN=...                     # Token API Jira
+QA_SUPPORT_GROUP_ID=S...               # ID del grupo @qa-support
 ```
 
-### **3. Verificar tareas**
-```powershell
-.\setup-scheduler.ps1 -List
+## 📖 Uso
+
+### Validación Inmediata
+
+Menciona al bot en Slack con un CHANGELOG:
+
+```
+@changebot CHANGELOG [Componente] [v1.0.0] [@qa-soporte] - TICKET-123
 ```
 
-### **4. Probar validador**
-```powershell
-.\setup-scheduler.ps1 -Test
-```
+### Ejecutar localmente
 
-¡Listo! Las validaciones se ejecutarán automáticamente.
-
-## 🔧 Configuración de Slack
-
-### 1. **Crear/Usar App de Slack**
-1. Ve a [api.slack.com/apps](https://api.slack.com/apps)
-2. Crea una nueva app o usa una existente
-3. **NO necesitas permiso de admin** para agregar al canal
-
-### 2. **Scopes Necesarios** (Bot Token Scopes)
-- `channels:history` - Leer historial del canal
-- `chat:write` - Enviar mensajes en el canal
-- `users:read` - Obtener información de usuarios (opcional)
-
-### 3. **Instalar en Workspace**
-1. Instala la app en tu workspace
-2. Agrega el bot al canal `#qa-soporte` (si es necesario)
-3. El bot puede leer sin ser admin
-
-### 4. **Obtener Token y Channel ID**
-- Token: Ve a **OAuth & Permissions** → **Bot User OAuth Token**
-- Channel ID: En Slack, abre `#qa-soporte` → Click en nombre → Copia el ID (formato: C...)
-
-## 🎯 Configuración de Jira
-
-### 1. **API Token**
-1. Ve a [id.atlassian.com/manage/api-tokens](https://id.atlassian.com/manage/api-tokens)
-2. Crea un nuevo token
-3. Configura en `.env`
-
-### 2. **Permisos Necesarios**
-- Leer issues
-- Leer comentarios
-- Leer attachments
-
-## 📝 Uso
-
-### **Formato de Mensaje Válido**
-```
-CHANGELOG [mi-componente] [v1.2.3]
-[RST-1867] Implementación de nueva funcionalidad
-[RST-1868] Corrección de bug crítico
-@qa-support @eduardo.baptista
-```
-
-### **Respuestas del Bot**
-
-**✅ Aprobación:**
-```
-✅ Se da approved por parte de QA para CHANGELOG mi-componente v1.2.3
-```
-
-**⚠️ Pendientes:**
-```
-⚠️ @usuario CHANGELOG mi-componente v1.2.3 tiene pendientes:
-
-❌ RST-1867: Estado actual es "In Progress" (debe estar Closed)
-❌ RST-1868: Falta evidencia (comentario con "evidencia" o imagen adjunta)
-
-🔄 Acciones requeridas:
-• Cerrar tickets pendientes
-• Agregar evidencia (comentario o imagen)
-• Volver a enviar cuando esté completo
-```
-
-## 🚀 Deployment
-
-### **Opción 1: Servidor Local**
 ```bash
+# Iniciar bot
 npm start
+
+# Desarrollo con auto-reload
+npm run dev
+
+# Configurar tareas programadas (Windows)
+npm run setup
 ```
 
-### **Opción 2: Docker** (opcional)
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-EXPOSE 3000
-CMD ["npm", "start"]
+## 🏗️ Estructura del Proyecto
+
+```
+.
+├── index.js                 # Punto de entrada principal
+├── mention-validator.js     # Validador de mentions
+├── changelog-validator.js   # Validador (legacy)
+├── services/
+│   ├── jiraService.js      # Integración Jira
+│   ├── slackService.js     # Integración Slack
+│   ├── messageValidator.js # Validación de mensajes
+│   └── internalValidator.js
+├── routes/
+│   ├── slack.js            # Rutas Slack
+│   └── validation.js       # Rutas de validación
+├── utils/
+│   └── logger.js           # Logging
+├── package.json
+└── .env
 ```
 
-### **Opción 3: Cloud (Heroku, AWS, etc.)**
-1. Configura variables de entorno
-2. Expone puerto correcto
-3. URL pública para webhook
+## 🔍 Cómo Funciona
 
-## 🔍 Monitoreo
+### 1. Detección de Mentions
+El bot revisa el canal cada 20 segundos buscando `@changebot`
 
-### **Health Check**
-```bash
-curl http://localhost:3000/health
+### 2. Validación de Jira
+Para cada ticket:
+- ✅ Verifica estado cerrado
+- ✅ Busca evidencia en comentarios
+- ✅ Valida archivos adjuntos
+
+### 3. Respuesta en Slack
+Responde en el mismo hilo con validaciones
+
+### Ejemplo de Respuesta
+
+```
+⚠️ Validaciones pendientes para CHANGELOG support-chats `v1.89.0`:
+
+* SPHC-6835 [Android] Feature X - 👀 Falta evidencia
+* SPTO-6355 [iOS] Feature Y - Finalizada ✅
+
+Cc: @usuario <!subteam^S0XXXXXXXXXX|@qa-support>
 ```
 
-### **Logs**
-El bot registra todas las actividades:
-- Mensajes procesados
-- Validaciones realizadas  
-- Respuestas enviadas
-- Errores encontrados
+## 🔐 Seguridad
 
-## 🛠️ Desarrollo
+- ✅ Credenciales en `.env` (no en git)
+- ✅ Validación de firma Slack
+- ✅ Autenticación Jira
 
-### **Estructura de Respuesta de Jira**
-```javascript
-{
-  allValid: boolean,
-  issues: string[],
-  totalTickets: number
-}
-```
+## 📚 Documentación Adicional
 
-### **Agregar Nuevas Validaciones**
-1. Edita `services/messageValidator.js`
-2. Implementa nueva lógica
-3. Agrega tests correspondientes
-
-## 📞 Soporte y Validación
-
-### **Endpoints de Validación**
-```bash
-# Estado de GitHub
-GET http://localhost:3000/validation/github-status
-
-# Validación de Copilot
-GET http://localhost:3000/validation/copilot-validation
-
-# Validación interna
-POST http://localhost:3000/validation/internal-validation
-```
-
-### **Usuario GitHub Validado**
-- **Usuario**: eduardo-baptista_rappinc
-- **Email**: eduardo.baptista+rappinc@rappi.com
-- **Copilot**: Acceso activo y monitoreado
-
-Para problemas o mejoras:
-1. Revisa logs del servidor
-2. Verifica configuración de Slack/Jira
-3. Confirma permisos y tokens
+- [INDEX.md](INDEX.md) - Mapa del proyecto
+- [QUICKSTART.md](QUICKSTART.md) - Guía rápida
+- [SCHEDULER.md](SCHEDULER.md) - Tareas programadas
+- [SETUP_COMPLETE.md](SETUP_COMPLETE.md) - Verificación
 
 ---
-**Estado**: ✅ Funcional - Automático 24/7
-=======
-# ChangeBot
 
-## 🚀 Instalación local
-
-1. Copiá `.env.example` como `.env` y completá tus datos:
-   - SLACK_BOT_TOKEN
-   - SLACK_SIGNING_SECRET
-   - JIRA_DOMAIN
-   - JIRA_EMAIL
-   - JIRA_API_TOKEN
-
-2. Instalá dependencias:
->>>>>>> 6a0c5f99da501f1a235cad821e923ef68ecbca59
+**Estado:** ✅ Listo para Producción  
+**Última actualización:** Feb 2, 2026
