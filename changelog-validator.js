@@ -2,10 +2,12 @@ const { WebClient } = require('@slack/web-api');
 const fs = require('fs');
 const path = require('path');
 const moment = require('moment');
+const mentionValidator = require('./mention-validator');
 require('dotenv').config();
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
+const BOT_USER_ID = 'U0973LJ4LP7'; // ID del bot changebot
 const STATE_FILE = path.join(__dirname, 'changelog-state.json');
 
 // Configuración de ventanas de validación
@@ -86,6 +88,27 @@ async function getRecentMessages(hoursBack = 24) {
 }
 
 /**
+ * Verifica si el mensaje menciona al bot
+ */
+function isBotMentioned(message) {
+  if (!message.text) return false;
+  
+  // Buscar mention directa del bot
+  const botMentionPattern = new RegExp(`<@${BOT_USER_ID}>`, 'i');
+  if (botMentionPattern.test(message.text)) {
+    return true;
+  }
+  
+  // Buscar @changebot en el texto
+  const nameMentionPattern = /@changebot/i;
+  if (nameMentionPattern.test(message.text)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
  * Extrae información de CHANGELOG del mensaje
  */
 function parseChangelogMessage(text) {
@@ -145,20 +168,84 @@ function getCurrentWindow() {
 }
 
 /**
+ * Valida un mensaje específico por mention
+ */
+async function validateMentionedMessage(message) {
+  console.log(`\n[${moment().format('YYYY-MM-DD HH:mm:ss')}] 🔔 Validación por mention detectada!`);
+  
+  const changelog = parseChangelogMessage(message.text);
+  if (!changelog) {
+    // Responder que no se encontró CHANGELOG válido
+    await slack.chat.postMessage({
+      channel: message.source_channel || SLACK_CHANNEL_ID,
+      text: `🤖 Hola! No encontré un formato de CHANGELOG válido en tu mensaje.\n\n✅ **Formato correcto:**\n\`CHANGELOG [Componente] [vX.X.X] [@qa-soporte] - TICKET-123\`\n\n💡 Mencióname en un mensaje con CHANGELOG para validación inmediata.`,
+      thread_ts: message.ts
+    });
+    return;
+  }
+  
+  console.log(`📝 CHANGELOG detectado: ${changelog.component} v${changelog.version}`);
+  
+  // Validar inmediatamente
+  const jiraService = require('./services/jiraService');
+  const slackService = require('./services/slackService');
+  
+  try {
+    const validation = await jiraService.validateJiraTickets(changelog.tickets);
+    const response = validation.isValid 
+      ? slackService.buildApprovalMessage(changelog, validation)
+      : slackService.buildPendingMessage(changelog, validation);
+    
+    await slack.chat.postMessage({
+      channel: message.source_channel || SLACK_CHANNEL_ID,
+      ...response,
+      thread_ts: message.ts
+    });
+    
+    console.log(`✅ Validación por mention completada: ${validation.isValid ? 'APROBADO' : 'PENDIENTE'}`);
+    
+  } catch (error) {
+    console.error('Error validando mention:', error);
+    await slack.chat.postMessage({
+      channel: message.source_channel || SLACK_CHANNEL_ID,
+      text: `🤖 ❌ Error procesando tu CHANGELOG. Inténtalo de nuevo o contacta al administrador.`,
+      thread_ts: message.ts
+    });
+  }
+}
+
+/**
  * Valida CHANGELOGs pendientes
  */
 async function validateChangelogs() {
-  console.log(`\n[${moment().format('YYYY-MM-DD HH:mm:ss')}] Iniciando validación de CHANGELOGs...`);
+  console.log(`\n[${moment().format('YYYY-MM-DD HH:mm:ss')}] 🚀 Iniciando validación completa...`);
 
+  // PRIORIDAD 1: Validar mentions inmediatamente
+  console.log('🔔 Paso 1: Buscando mentions @changebot...');
+  await mentionValidator.checkForMentions();
+
+  // PRIORIDAD 2: Validaciones programadas (solo en ventanas de tiempo)
+  if (!isInValidationWindow()) {
+    console.log('⏰ Fuera de ventana de validación - Solo mentions procesadas');
+    return;
+  }
+
+  console.log('📅 Paso 2: Validaciones programadas de CHANGELOGs...');
+  
   const state = getState();
   const messages = await getRecentMessages(24);
   let newChangelogs = [];
   let pendingValidations = [];
 
-  // Procesar nuevos mensajes
+  // Procesar CHANGELOGs (excluyendo los que ya fueron procesados por mention)
   for (const msg of messages) {
     if (msg.bot_id || msg.subtype === 'bot_message') continue;
-
+    
+    // Skip mensajes con mentions ya procesados
+    if (mentionValidator.isBotMentioned(msg)) {
+      continue;
+    }
+    
     const changelog = parseChangelogMessage(msg.text);
     if (!changelog) continue;
 

@@ -1,15 +1,14 @@
 {
-<<<<<<< HEAD
   "name": "changebot",
   "version": "1.0.0",
   "description": "Bot automatizado para validación de mensajes de CHANGELOG en Slack con integración a Jira",
-  "main": "server.js",
+  "main": "changelog-validator.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node changelog-validator.js",
     "validate": "node changelog-validator.js",
-    "setup-scheduler": "powershell -ExecutionPolicy Bypass -File setup-scheduler.ps1 -Setup",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "mentions": "node mention-validator.js",
+    "test": "node test-mentions.js",
+    "setup-scheduler": "powershell -ExecutionPolicy Bypass -File setup-scheduler.ps1 -Setup"
   },
   "keywords": [
     "slack",
@@ -38,17 +37,3 @@
     "node": ">=18.0.0"
   }
 }
-=======
-  "name": "change-bot",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "@slack/bolt": "^3.12.2",
-    "axios": "^1.4.0",
-    "dotenv": "^16.3.1"
-  }
-}
->>>>>>> 6a0c5f99da501f1a235cad821e923ef68ecbca59
