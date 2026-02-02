@@ -18,6 +18,21 @@ setInterval(() => {
   processedChangelogs.clear();
 }, 10 * 60 * 1000);
 
+// ✅ CACHE de usuarios de Slack para evitar rate limiting
+const slackUserCache = new Map(); // {email -> userId}
+const slackUserListCache = {
+  timestamp: 0,
+  data: null,
+  ttl: 60 * 60 * 1000 // 1 hora
+};
+
+// Limpiar caché de usuarios cada hora
+setInterval(() => {
+  slackUserCache.clear();
+  slackUserListCache.timestamp = 0;
+  console.log('🧹 Cache de usuarios limpiado');
+}, 60 * 60 * 1000);
+
 /**
  * Cliente Jira para validaciones
  */
@@ -154,48 +169,85 @@ class JiraValidator {
 
 const jiraValidator = new JiraValidator();
 
+
 /**
- * Buscar user ID de Slack por email o username
+ * Obtener lista de usuarios con caché (máximo 1 llamada por hora)
+ */
+async function getCachedUsersList() {
+  const now = Date.now();
+  
+  // Si tenemos datos en caché y no han expirado, usarlos
+  if (slackUserListCache.data && (now - slackUserListCache.timestamp) < slackUserListCache.ttl) {
+    return slackUserListCache.data;
+  }
+  
+  try {
+    console.log('⏳ Actualizando caché de usuarios de Slack...');
+    const result = await slack.users.list();
+    slackUserListCache.data = result.members;
+    slackUserListCache.timestamp = now;
+    console.log(`✅ ${result.members.length} usuarios cacheados`);
+    return result.members;
+  } catch (error) {
+    console.log(`⚠️ Error cargando usuarios: ${error.message}`);
+    return slackUserListCache.data || [];
+  }
+}
+/**
+ * Buscar user ID de Slack por email o username (CON CACHÉ)
  */
 async function findSlackUserByEmail(email) {
   try {
     if (!email) return null;
     
-    // Intentar lookup por email primero
+    // 1️⃣ Verificar si ya está en caché
+    if (slackUserCache.has(email)) {
+      const cached = slackUserCache.get(email);
+      if (cached) console.log(`   ✅ Usuario del caché: ${cached}`);
+      return cached;
+    }
+    
+    // 2️⃣ Intentar lookup por email (método más confiable)
     try {
       const result = await slack.users.lookupByEmail({ email });
+      slackUserCache.set(email, result.user.id);
       console.log(`   ✅ Usuario encontrado por email: ${result.user.id}`);
       return result.user.id;
     } catch (emailError) {
-      // Si falla por email, intentar extraer username del email
+      // Email lookup falló, intentar búsqueda por username
       const username = email.split('@')[0]; // e.g., "eduardo.baptista"
-      console.log(`   🔍 Intentando buscar por username: ${username}`);
+      console.log(`   🔍 Buscando por username: ${username}`);
       
-      // Obtener lista de usuarios y buscar por nombre
-      const users = await slack.users.list();
+      // Usar lista cacheada de usuarios
+      const users = await getCachedUsersList();
       
-      for (const user of users.members) {
+      for (const user of users) {
         // Buscar coincidencias en el campo "name" (username)
         if (user.name === username) {
+          slackUserCache.set(email, user.id);
           console.log(`   ✅ Usuario encontrado por nombre: ${user.id} (${user.name})`);
           return user.id;
         }
         
-        // Fallback: buscar en real_name por si el nombre aparece allí
+        // Fallback: buscar en real_name
         if (user.real_name && user.real_name.toLowerCase().includes(username.replace('.', ' '))) {
+          slackUserCache.set(email, user.id);
           console.log(`   ✅ Usuario encontrado por real_name: ${user.id} (${user.real_name})`);
           return user.id;
         }
       }
       
+      // No encontrado, guardar null en caché para no reintentar pronto
+      slackUserCache.set(email, null);
       console.log(`   ℹ️ No se encontró usuario en Slack para ${email}`);
       return null;
     }
   } catch (error) {
-    console.log(`   ℹ️ Error buscando usuario: ${error.message}`);
+    console.log(`   ⚠️ Error buscando usuario: ${error.message}`);
     return null;
   }
 }
+
 
 /**
  * Función para detectar mentions del bot
