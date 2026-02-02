@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ChangeBot - Automatización de Validación de CHANGELOG
 
 Bot automatizado para validar mensajes de CHANGELOG en Slack (#qa-soporte) con integración a Jira.
@@ -220,3 +221,17 @@ Para problemas o mejoras:
 
 ---
 **Estado**: ✅ Funcional - Automático 24/7
+=======
+# ChangeBot
+
+## 🚀 Instalación local
+
+1. Copiá `.env.example` como `.env` y completá tus datos:
+   - SLACK_BOT_TOKEN
+   - SLACK_SIGNING_SECRET
+   - JIRA_DOMAIN
+   - JIRA_EMAIL
+   - JIRA_API_TOKEN
+
+2. Instalá dependencias:
+>>>>>>> 6a0c5f99da501f1a235cad821e923ef68ecbca59

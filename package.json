@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "changebot",
   "version": "1.0.0",
   "description": "Bot automatizado para validación de mensajes de CHANGELOG en Slack con integración a Jira",
@@ -37,3 +38,17 @@
     "node": ">=18.0.0"
   }
 }
+=======
+  "name": "change-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.12.2",
+    "axios": "^1.4.0",
+    "dotenv": "^16.3.1"
+  }
+}
+>>>>>>> 6a0c5f99da501f1a235cad821e923ef68ecbca59
