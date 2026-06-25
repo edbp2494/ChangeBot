@@ -38,8 +38,8 @@ cp .env.example .env
 SLACK_BOT_TOKEN=xoxb-...              # Token del bot
 SLACK_SIGNING_SECRET=...               # Signing secret
 SLACK_CHANNEL_ID=C...                  # ID del canal
-JIRA_DOMAIN=rappidev.atlassian.net     # Dominio Jira
-JIRA_EMAIL=user@rappi.com             # Email Jira
+JIRA_DOMAIN=yourcompany.atlassian.net     # Dominio Jira
+JIRA_EMAIL=user@company.com             # Email Jira
 JIRA_API_TOKEN=...                     # Token API Jira
 QA_SUPPORT_GROUP_ID=S...               # ID del grupo @qa-support
 ```
