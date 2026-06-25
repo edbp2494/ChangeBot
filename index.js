@@ -38,7 +38,7 @@ setInterval(() => {
  */
 class JiraValidator {
   constructor() {
-    this.baseURL = `https://${process.env.JIRA_DOMAIN || 'rappidev.atlassian.net'}`;
+    this.baseURL = `https://${process.env.JIRA_DOMAIN || 'yourcompany.atlassian.net'}`;
     this.auth = {
       username: process.env.JIRA_EMAIL,
       password: process.env.JIRA_API_TOKEN
@@ -347,7 +347,7 @@ function parseChangelogMessage(text) {
  */
 async function generateValidationResponse(changelog, validationResults, originalUser) {
   const allValid = validationResults.every(result => result.valid);
-  const jiraBaseUrl = 'https://rappidev.atlassian.net/browse';
+  const jiraBaseUrl = 'https://yourcompany.atlassian.net/browse';
   
   // Pre-procesar assignees: buscar user IDs de Slack
   for (const result of validationResults) {
